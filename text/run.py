@@ -10,6 +10,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from text.datasets.text_dataset import collate_fn
 from text.baseline_model import TextBaseline
 from text.dwac_model import AttentionCnnDwac
+from text.dwac_proto_model import ProtoDwac
 from text.common import load_dataset
 from utils.common import to_numpy
 
@@ -73,6 +74,9 @@ def main():
                         help='label smoothing factor for learning')
     parser.add_argument('--topk', type=int, default=10, metavar='N',
                         help='top k nearest neighbors to compare to at test time')
+    # ProtoDWAC Architecture Options
+    parser.add_argument('--n-proto', type=int, default=5, metavar='N',
+                        help='number of prototypes per class')
 
     # Running Options
     parser.add_argument('--device', type=int, default=None,
@@ -99,7 +103,8 @@ def main():
             torch.cuda.manual_seed_all(args.seed)
 
     # load data and create vocab and label vocab objects
-    vocab, label_vocab, train_loader, dev_loader, test_loader, ref_loader, ood_loader = load_data(args)
+    vocab, label_vocab, train_loader, dev_loader, test_loader, ref_loader, ood_loader = \
+        load_data(args)
     args.n_classes = len(label_vocab)
 
     # load an initialize the embeddings
@@ -112,6 +117,9 @@ def main():
     elif args.model == 'dwac':
         print("Creating DWAC model")
         model = AttentionCnnDwac(args, vocab, embeddings_matrix)
+    elif args.model == 'proto':
+        print("Creating Prototyped DWAC model")
+        model = ProtoDwac(args, vocab, embeddings_matrix)
     else:
         raise ValueError("Model type not recognized.")
     print("Update embeddings = ", args.update_embeddings)
@@ -234,13 +242,15 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
             if batch_idx % args.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(train_loader.sampler),
-                           100. * batch_idx / len(train_loader), loss))
+                    100. * batch_idx / len(train_loader), loss))
 
         if args.model == 'dwac':
-            dev_output = test_fast(args, model, dev_loader, ref_loader, name='Dev', return_acc=True)
+            dev_output = test_fast(
+                args, model, dev_loader, ref_loader, name='Dev', return_acc=True)
             dev_acc = dev_output['accuracy']
         else:
-            dev_acc, dev_indices = test(args, model, dev_loader, ref_loader, name='Dev', return_acc=True)
+            dev_acc, dev_indices = test(
+                args, model, dev_loader, ref_loader, name='Dev', return_acc=True)
 
         if dev_acc > best_dev_acc:
             print("New best dev accuracy: {:.5f}\n".format(dev_acc))
@@ -279,7 +289,8 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         save_output(os.path.join(args.output_dir, 'dev.npz'),
                     test_fast(args, model, dev_loader, ref_loader, name='Dev'))
     else:
-        dev_labels, dev_indices, dev_pred_probs, dev_z, dev_confs, dev_atts = test(args, model, dev_loader, ref_loader, name='Dev')
+        dev_labels, dev_indices, dev_pred_probs, dev_z, dev_confs, dev_atts = test(
+            args, model, dev_loader, ref_loader, name='Dev')
         print("Saving")
         np.savez(os.path.join(args.output_dir, 'dev.npz'),
                  labels=dev_labels,
@@ -293,7 +304,8 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         save_output(os.path.join(args.output_dir, 'test.npz'),
                     test_fast(args, model, test_loader, ref_loader, name='Test'))
     else:
-        test_labels, test_indices, test_pred_probs, test_z, test_confs, test_atts = test(args, model, test_loader, ref_loader, name='Test')
+        test_labels, test_indices, test_pred_probs, test_z, test_confs, test_atts = test(
+            args, model, test_loader, ref_loader, name='Test')
         print("Saving")
         np.savez(os.path.join(args.output_dir, 'test.npz'),
                  labels=test_labels,
@@ -342,7 +354,7 @@ def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
         if not return_acc:
             true_labels.extend(list(to_numpy(target, args.device)))
             pred_probs.append(to_numpy(output['probs'].exp(), args.device))
-            #all_indices.extend(list(to_numpy(indices, args.device)))
+            # all_indices.extend(list(to_numpy(indices, args.device)))
             zs.append(to_numpy(output['z'], args.device))
             atts.append(to_numpy(output['att'], args.device))
             if args.model == 'dwac':
@@ -428,12 +440,12 @@ def save_output(path, output):
         att_vectors.extend([m[i, :] for i in range(len(m))])
         lengths.extend([len(m[i, :]) for i in range(len(m))])
     np.savez(path,
-             z          = output['zs'].cpu().data.numpy(),
-             labels     = output['ys'].cpu().data.numpy(),
-             indices    = output['is'].cpu().data.numpy(),
-             pred_probs = output['probs'].exp().cpu().data.numpy(),
-             confs      = output['confs'].cpu().data.numpy(),
-             atts       = att_vectors)
+             z=output['zs'].cpu().data.numpy(),
+             labels=output['ys'].cpu().data.numpy(),
+             indices=output['is'].cpu().data.numpy(),
+             pred_probs=output['probs'].exp().cpu().data.numpy(),
+             confs=output['confs'].cpu().data.numpy(),
+             atts=att_vectors)
 
 
 if __name__ == '__main__':
