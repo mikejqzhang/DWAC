@@ -1,4 +1,5 @@
 import os
+import json
 import gzip
 import argparse
 
@@ -10,7 +11,7 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from text.datasets.text_dataset import collate_fn
 from text.baseline_model import TextBaseline
 from text.dwac_model import AttentionCnnDwac
-from text.dwac_proto_model import ProtoDwac
+from text.proto_model import ProtoDwac
 from text.common import load_dataset
 from utils.common import to_numpy
 
@@ -32,8 +33,8 @@ def main():
                         help='Convert text to lower case')
 
     # Model Options
-    parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz', metavar='N',
-                        help='Glove vectors')
+    parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',
+                        metavar='N', help='Glove vectors')
     parser.add_argument('--embedding-dim', type=int, default=300, metavar='N',
                         help='word vector dimensions')
     parser.add_argument('--hidden-dim', type=int, default=100, metavar='N',
@@ -74,6 +75,7 @@ def main():
                         help='label smoothing factor for learning')
     parser.add_argument('--topk', type=int, default=10, metavar='N',
                         help='top k nearest neighbors to compare to at test time')
+
     # ProtoDWAC Architecture Options
     parser.add_argument('--n-proto', type=int, default=5, metavar='N',
                         help='number of prototypes per class')
@@ -246,7 +248,7 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
 
         if args.model == 'dwac':
             dev_output = test_fast(
-                args, model, dev_loader, ref_loader, name='Dev', return_acc=True)
+                args, model, dev_loader, ref_loader, name='Dev')
             dev_acc = dev_output['accuracy']
         else:
             dev_acc, dev_indices = test(
@@ -289,7 +291,7 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         save_output(os.path.join(args.output_dir, 'dev.npz'),
                     test_fast(args, model, dev_loader, ref_loader, name='Dev'))
     else:
-        dev_labels, dev_indices, dev_pred_probs, dev_z, dev_confs, dev_atts = test(
+        dev_acc, dev_labels, dev_indices, dev_pred_probs, dev_z, dev_confs, dev_atts = test(
             args, model, dev_loader, ref_loader, name='Dev')
         print("Saving")
         np.savez(os.path.join(args.output_dir, 'dev.npz'),
@@ -304,7 +306,7 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         save_output(os.path.join(args.output_dir, 'test.npz'),
                     test_fast(args, model, test_loader, ref_loader, name='Test'))
     else:
-        test_labels, test_indices, test_pred_probs, test_z, test_confs, test_atts = test(
+        test_acc, test_labels, test_indices, test_pred_probs, test_z, test_confs, test_atts = test(
             args, model, test_loader, ref_loader, name='Test')
         print("Saving")
         np.savez(os.path.join(args.output_dir, 'test.npz'),
@@ -321,7 +323,7 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
                         test_fast(args, model, ood_loader, ref_loader, name='OOD'))
         else:
             print("Doing OOD eval")
-            ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(args, model, ood_loader, ref_loader, name='OOD')
+            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(args, model, ood_loader, ref_loader, name='OOD')
             print("Saving")
             np.savez(os.path.join(args.output_dir, 'ood.npz'),
                      labels=ood_labels,
@@ -329,6 +331,12 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
                      pred_probs=ood_pred_probs,
                      indices=ood_indices,
                      confs=ood_confs)
+
+    print('Saving Dev+Test Metrics')
+    with open(os.path.join(args.output_dir, 'metrics.json'), 'w') as metrics_f:
+        json.dump({'dev_acc': dev_acc, 'test_acc': test_acc, 'best_epoch': best_epoch},
+                  metrics_f,
+                  indent=4)
 
 
 def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
@@ -381,10 +389,11 @@ def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
             att_matrix[index:index+batch_size, :width] = m.copy()
             index += batch_size
 
-        return true_labels, all_indices, np.vstack(pred_probs), np.vstack(zs), confs, att_matrix
+        return (acc, true_labels, all_indices,
+                np.vstack(pred_probs), np.vstack(zs), confs, att_matrix)
 
 
-def test_fast(args, model, test_loader, ref_loader, name='Test', return_acc=False):
+def test_fast(args, model, test_loader, ref_loader, name='Test'):
     with torch.no_grad():
         output = model.evaluate(test_loader, ref_loader)
     test_loss = output['loss']

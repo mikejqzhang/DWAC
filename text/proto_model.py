@@ -20,56 +20,16 @@ class ProtoDwac(object):
         self.optim.step()
         return output_dict
 
-    def evaluate(self, test_loader, ref_loader):
+    def evaluate(self, x, y, ref_loader):
         self.model.eval()
         with torch.no_grad():
-            ref_zs = self.model.proto_xs.cpu()
-
-            test_reps, test_ys, test_is = zip(*[(self.model.get_representation(x.to(self.device)),
-                                                 y, i) for x, y, i in test_loader])
-            test_zs, test_alphas = zip(*[(rep[0].cpu(), rep[1]) for rep in test_reps])
-            class_dists = []
-
-            for z in test_zs:
-                z = z.to(self.device)
-                z_norm = z.pow(2).sum(dim=1)
-
-                batch_class_dists = torch.zeros([z.shape[0], self.n_classes], device=z.device)
-                for ref_z, ref_y in ref_zs:
-                    ref_z, ref_y = ref_z.to(self.device), ref_y.to(self.device)
-                    batch_output = self.model.classify_against_ref(z, z_norm, ref_z, ref_y)
-                    batch_class_dists.add_(batch_output['class_dists'])
-                class_dists.append(batch_class_dists.cpu())
-
-            test_zs = torch.cat(test_zs, dim=0)
-            test_ys = torch.cat(test_ys, dim=0)
-            test_is = torch.cat(test_is, dim=0)
-
-            class_dists = torch.cat(class_dists, dim=0)
-            probs = class_dists.div(class_dists.sum(dim=1, keepdim=True)).log()
-
-            total_loss = self.model.criterion(probs, test_ys)
-            correct = torch.eq(probs.argmax(dim=1), test_ys).sum().item()
-
-            output_dict = {
-                'zs': test_zs,
-                'ys': test_ys,
-                'is': test_is,
-                'probs': probs,
-                'confs': class_dists,
-                'att': test_alphas,
-                'total_loss': total_loss,
-                'loss': total_loss.div(len(test_loader.sampler)),
-                'correct': correct,
-                'accuracy': correct / len(test_loader.sampler),
-            }
-            return output_dict
+            output_dict = self.model(x, y)
+        return output_dict
 
     def embed(self, x):
         self.model.eval()
         with torch.no_grad():
-            z, alpha = self.model.get_representation(x)
-            output_dict = {'z': z, 'att': alpha}
+            output_dict = self.model(x=x, y=None)
         return output_dict
 
     def save(self, filepath):
@@ -96,13 +56,15 @@ class ProtoDwacModule(nn.Module):
             print("Using Laplace kernel")
             self.distance_metric = self._laplacian_kernel
         elif args.kernel == 'invquad':
-            print("Using Inverse Quadratic kernel with smoothing parameter {:.3f}".format(self.gamma))
+            print("Using Inverse Quadratic kernel with smoothing parameter {:.3f}".format(
+                self.gamma))
             self.distance_metric = self._inverse_quadratic
         else:
             print("Using Guassian kernel")
             self.distance_metric = self._gaussian_kernel
 
-        self.embedding_layer = nn.Embedding(self.vocab_size, self.embedding_dim, self.vocab.pad_idx)
+        self.embedding_layer = nn.Embedding(self.vocab_size, self.embedding_dim,
+                                            self.vocab.pad_idx)
         if embeddings_matrix is not None:
             self.embedding_layer.weight = nn.Parameter(
                 embeddings_matrix,
@@ -146,21 +108,20 @@ class ProtoDwacModule(nn.Module):
         z = self.output_layer(z)
         return z, alpha.squeeze(2)
 
-    def forward(self, x, y):
-        z, att = self.get_representation(x)
+    def forward(self, x, y=None):
+        z, alpha = self.get_representation(x)
         z_norm = z.pow(2).sum(dim=1)
-        output_dict = self.classify_against_ref(z, z_norm, self.proto_xs, self.proto_ys)
-        class_dists = output_dict['class_dists']
 
+        class_dists = self.classify_against_ref(z, z_norm, self.proto_xs, self.proto_ys)
         probs = torch.div(class_dists.t(), class_dists.sum(dim=1)).log().t()
 
-        total_loss = self.criterion(probs, y)
+        output_dict = {'z': z, 'probs': probs, 'att': alpha}
+        if y is not None:
+            total_loss = self.criterion(probs, y)
+            loss = total_loss / x.shape[0]
+            output_dict['total_loss'] = total_loss
+            output_dict['loss'] = loss
 
-        output_dict = {
-            'probs': probs,
-            'loss': total_loss.div(x.shape[0]),
-            'total_loss': total_loss,
-        }
         return output_dict
 
     def _gaussian_kernel(self, dists):
@@ -184,9 +145,4 @@ class ProtoDwacModule(nn.Module):
                                  device=ref_z.device)
         class_mask.scatter_(1, ref_y.view(ref_z.shape[0], 1), 1)
         class_dists = torch.mm(fast_dists, class_mask)
-
-        output_dict = {
-            'class_dists': class_dists,
-        }
-
-        return output_dict
+        return class_dists
