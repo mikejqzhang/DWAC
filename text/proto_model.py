@@ -80,7 +80,8 @@ class ProtoDwacModule(nn.Module):
 
         self.n_proto = args.n_proto
         self.proto_xs = nn.Parameter(torch.randn(self.n_classes * self.n_proto, self.z_dim))
-        self.proto_ys = torch.LongTensor(list(range(self.n_classes)) * self.n_proto, )
+        self.proto_ys = nn.Parameter(torch.LongTensor(list(range(self.n_classes)) * self.n_proto),
+                                     requires_grad=False)
 
         self.conv1_layer = nn.Conv1d(self.embedding_dim,
                                      self.hidden_dim,
