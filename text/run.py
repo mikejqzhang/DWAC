@@ -288,8 +288,9 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
 
     print("Doing dev eval")
     if args.model == 'dwac':
-        save_output(os.path.join(args.output_dir, 'dev.npz'),
-                    test_fast(args, model, dev_loader, ref_loader, name='Dev'))
+        dev_output = test_fast(args, model, dev_loader, ref_loader, name='Dev')
+        dev_acc = dev_output['accuracy']
+        save_output(os.path.join(args.output_dir, 'dev.npz'), dev_output)
     else:
         dev_acc, dev_labels, dev_indices, dev_pred_probs, dev_z, dev_confs, dev_atts = test(
             args, model, dev_loader, ref_loader, name='Dev')
@@ -303,8 +304,9 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
 
     print("Doing test eval")
     if args.model == 'dwac':
-        save_output(os.path.join(args.output_dir, 'test.npz'),
-                    test_fast(args, model, test_loader, ref_loader, name='Test'))
+        test_output = test_fast(args, model, test_loader, ref_loader, name='Test')
+        test_acc = test_output['accuracy']
+        save_output(os.path.join(args.output_dir, 'test.npz'), test_output)
     else:
         test_acc, test_labels, test_indices, test_pred_probs, test_z, test_confs, test_atts = test(
             args, model, test_loader, ref_loader, name='Test')
@@ -319,8 +321,9 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
 
     if ood_loader is not None:
         if args.model == 'dwac':
-            save_output(os.path.join(args.output_dir, 'ood.npz'),
-                        test_fast(args, model, ood_loader, ref_loader, name='OOD'))
+            ood_output = test_fast(args, model, ood_loader, ref_loader, name='OOD')
+            ood_acc = ood_output['accuracy']
+            save_output(os.path.join(args.output_dir, 'ood.npz'), ood_output)
         else:
             print("Doing OOD eval")
             ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(args, model, ood_loader, ref_loader, name='OOD')
