@@ -145,5 +145,5 @@ class ProtoDwacModule(nn.Module):
                                  self.n_classes,
                                  device=ref_z.device)
         class_mask.scatter_(1, ref_y.view(ref_z.shape[0], 1), 1)
-        class_dists = torch.mm(fast_dists, class_mask)
+        class_dists = torch.mm(fast_dists, class_mask) + 1e-6
         return class_dists
