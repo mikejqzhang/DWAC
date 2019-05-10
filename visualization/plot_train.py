@@ -6,9 +6,34 @@ from optparse import OptionParser
 
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.decomposition import PCA
+
+stack_overflow_classes = ['wordpress',
+               'oracle',
+               'svn',
+               'apache',
+               'excel',
+               'matlab',
+               'visual-studio',
+               'cocoa',
+               'osx',
+               'bash',
+               'spring',
+               'hibernate',
+               'scala',
+               'sharepoint',
+               'ajax',
+               'qt',
+               'drupal',
+               'linq',
+               'haskell',
+               'magento']
+
+imdb_classes = ['Negative', 'Postive']
 
 
 def main():
+    plt.rcParams["figure.figsize"] = (10,10)
     usage = "%prog exp_dir"
     parser = OptionParser(usage=usage)
     parser.add_option('--split', action="store_true", dest="split", default=False,
@@ -18,36 +43,51 @@ def main():
 
     (options, args) = parser.parse_args()
     indir = args[0]
+    dataset = args[1]
+    num_proto = args[2]
+
+    class_list = stack_overflow_classes if dataset == 'stack_overflow' else imdb_classes
+
     train_file = os.path.join(indir, 'train.npz')
+    dev_file = os.path.join(indir, 'dev.npz')
 
     seed = int(options.seed)
     split = options.split
     np.random.seed(seed)
 
     train_data = np.load(train_file)
+    dev_data = np.load(dev_file)
+    viz_data(train_data, 'train', dataset,  num_proto, class_list)
+    viz_data(dev_data, 'dev', dataset, num_proto, class_list)
 
-    train_z = train_data['z']
-    train_labels = train_data['labels']
-    n_train, dz = train_z.shape
-    print(train_z.shape)
+def viz_data(data, name, dataset, num_proto, class_list, split=False):
+    z = data['z']
+    labels = data['labels']
+    n, dz = z.shape
+    print(z.shape)
 
-    n_classes = np.max(train_labels+1)
+    n_classes = np.max(labels+1)
 
     # scatter the labels
-    train_labels = scatter(train_labels, n_classes)
+    labels = scatter(labels, n_classes)
+    pca = PCA(n_components=2)
+    reduced_z = pca.fit_transform(z)
 
     if split:
         fig, axes = plt.subplots(nrows=1, ncols=n_classes, figsize=(n_classes*2, 2), sharex=True, sharey=True)
     else:
         fig, ax = plt.subplots()
+    scatters = []
     for k in range(n_classes):
-        indices = np.array(train_labels[:, k], dtype=bool)
+        indices = np.array(labels[:, k], dtype=bool)
         if split:
-            axes[k].scatter(train_z[indices, 0], train_z[indices, 1], c='k', alpha=0.5)
+            axes[k].scatter(z[indices, 0], z[indices, 1], c='k', alpha=0.5)
         else:
-            ax.scatter(train_z[indices, 0], train_z[indices, 1], s=1, alpha=0.5)
+            scatters.append(ax.scatter(z[indices, 0], z[indices, 1], s=1, alpha=0.9))
 
-    plt.savefig('test.pdf')
+    ax.legend(scatters, class_list)
+    plt.title('PCA of {} with {} prototypes'.format(dataset, num_proto))
+    plt.savefig('{}_{}_{}.pdf'.format(dataset, num_proto, name))
 
 
 def scatter(labels, n_classes):
