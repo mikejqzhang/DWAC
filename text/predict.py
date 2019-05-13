@@ -14,7 +14,8 @@ from text.dwac_model import AttentionCnnDwac
 from text.proto_model import ProtoDwac
 from text.common import load_dataset
 from utils.common import to_numpy
-
+from text.run import load_embeddings, load_data
+ 
 def main():
     parser = argparse.ArgumentParser(description='Text Classifier',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -33,6 +34,7 @@ def main():
 
     # Model Options
     parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',
+    #parser.add_argument('--glove-file', type=str, default='/cse/web/courses/cse447/19wi/assignments/resources/glove/glove.6B.300d.txt.gz',
                         metavar='N', help='Glove vectors')
     parser.add_argument('--embedding-dim', type=int, default=300, metavar='N',
                         help='word vector dimensions')
@@ -88,80 +90,52 @@ def main():
                         help='random seed')
 
     args = parser.parse_args()
+    
+    if args.device is None:
+        args.device = 'cpu'
+    else:
+        args.device = 'cuda:' + str(args.device)
+    print("Using device:", args.device)
+    args.update_embeddings = not args.fix_embeddings
+
+    if args.seed is not None:
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+        if args.device != 'cpu':
+            torch.backends.cudnn.deterministic = True
+            torch.cuda.manual_seed_all(args.seed)
+
     print("Start predicting")
     # load data and create vocab and label vocab objects
     vocab, label_vocab, train_loader, dev_loader, test_loader, ref_loader, ood_loader = \
         load_data(args)
     args.n_classes = len(label_vocab)
 
+    # load an initialize the embeddings
+    embeddings_matrix = load_embeddings(args, vocab)
+
+    # create the model
+    if args.model == 'baseline':
+        print("Creating baseline model")
+        model = TextBaseline(args, vocab, embeddings_matrix)
+    elif args.model == 'dwac':
+        print("Creating DWAC model")
+        model = AttentionCnnDwac(args, vocab, embeddings_matrix)
+    elif args.model == 'proto':
+        print("Creating Prototyped DWAC model")
+        model = ProtoDwac(args, vocab, embeddings_matrix)
+    else:
+        raise ValueError("Model type not recognized.")
     # create the model
     model_file = os.path.join(args.output_dir, 'model.best.tar')
     print("Reloading best model")
-    model = torch.load(model_file)
+    model.load(model_file)
 
 
 
-    train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_loader)
+    train(args, label_vocab, model, train_loader, dev_loader, test_loader, ref_loader, ood_loader)
 
-def load_data(args):
-
-    ood_loader = None
-    train_dataset, test_dataset, ood_dataset = load_dataset(args.root_dir, args.dataset, args.subset, args.lower)
-
-    print(len(train_dataset))
-    print(len(test_dataset))
-    n_train = len(train_dataset)
-    indices = list(range(n_train))
-    split = int(np.floor(args.dev_prop * n_train))
-    np.random.shuffle(indices)
-    train_idx, dev_idx = indices[split:], indices[:split]
-    train_sampler = SubsetRandomSampler(train_idx)
-    dev_sampler = SubsetRandomSampler(dev_idx)
-    ref_sampler = SubsetRandomSampler(train_idx)
-
-    kwargs = {'num_workers': 1, 'pin_memory': True} if args.device != 'cpu' else {}
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=args.batch_size,
-        sampler=train_sampler,
-        shuffle=False,
-        collate_fn=collate_fn,
-        **kwargs)
-    dev_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=args.test_batch_size,
-        sampler=dev_sampler,
-        shuffle=False,
-        collate_fn=collate_fn,
-        **kwargs)
-    test_loader = torch.utils.data.DataLoader(
-        test_dataset,
-        batch_size=args.test_batch_size,
-        shuffle=True,
-        collate_fn=collate_fn,
-        **kwargs)
-    ref_loader = torch.utils.data.DataLoader(
-        train_dataset,
-        batch_size=args.test_batch_size,
-        sampler=ref_sampler,
-        shuffle=False,
-        collate_fn=collate_fn,
-        **kwargs)
-    if ood_dataset is not None:
-        ood_loader = torch.utils.data.DataLoader(
-            ood_dataset,
-            batch_size=args.test_batch_size,
-            shuffle=True,
-            collate_fn=collate_fn,
-            **kwargs)
-
-    vocab = train_dataset.vocab
-    label_vocab = train_dataset.label_vocab
-
-    return vocab, label_vocab, train_loader, dev_loader, test_loader, ref_loader, ood_loader
-
-
-def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_loader=None):
+def train(args, label_vocab, model, train_loader, dev_loader, test_loader, ref_loader, ood_loader=None):
     best_dev_acc = 0.0
     done = False
     epoch = 0
@@ -180,17 +154,12 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         save_output(os.path.join(args.output_dir, 'test.npz'), test_output)
     else:
         test_acc, test_labels, test_indices, test_pred_probs, test_z, test_confs, test_atts = test(
-            args, model, test_loader, ref_loader, name='Test')
+            args, label_vocab, model, test_loader, ref_loader, name='Test')
         print("Saving")
 
 
-    print('Saving Dev+Test Metrics')
-    with open(os.path.join(args.output_dir, 'metrics.json'), 'w') as metrics_f:
-        json.dump({'dev_acc': dev_acc, 'test_acc': test_acc, 'best_epoch': best_epoch},
-                  metrics_f,
-                  indent=4)
 
-def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
+def test(args, label_vocab, model, test_loader, ref_loader, name='Test', return_acc=False):
     test_loss = 0
     correct = 0
     true_labels = []
@@ -200,7 +169,7 @@ def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
     zs = []
     atts = []
     n_items = 0
-    with open(os.path.join(args.output_dir, 'predicted.tsv'), 'w') as predicted, open(os.path.join(args.output_dir, 'actual.tsv'), 'w') as actual:
+    with open(os.path.join(args.output_dir, 'predicted.tsv'), 'w+') as predicted, open(os.path.join(args.output_dir, 'actual.tsv'), 'w+') as actual:
         for batch_idx, (data, target, indices) in enumerate(test_loader):
             data, target = data.to(args.device), target.to(args.device)
             output = model.evaluate(data, target, ref_loader)
@@ -209,8 +178,9 @@ def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
             n_items += batch_size
             pred = output['probs'].max(1, keepdim=True)[1]
             correct += pred.eq(target.view_as(pred)).sum().item()
-            actual.write(label_vocab(target) + "\n")
-            predicted.write(label_vocab(pred) + "\n")
+            for t, p in zip(target, pred):
+                actual.write(label_vocab.idx2word[t.item()] + "\n")
+                predicted.write(label_vocab.idx2word[p.item()] + "\n")
             all_indices.extend(list(to_numpy(indices, args.device)))
             if not return_acc:
                 true_labels.extend(list(to_numpy(target, args.device)))

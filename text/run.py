@@ -33,8 +33,9 @@ def main():
                         help='Convert text to lower case')
 
     # Model Options
-    parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',
-                        metavar='N', help='Glove vectors')
+    parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',metavar='N', help='Glove vectors')
+    #parser.add_argument('--glove-file', type=str, default='/cse/web/courses/cse447/19wi/assignments/resources/glove/glove.6B.300d.txt.gz',
+    #                    metavar='N', help='Glove vectors')
     parser.add_argument('--embedding-dim', type=int, default=300, metavar='N',
                         help='word vector dimensions')
     parser.add_argument('--hidden-dim', type=int, default=100, metavar='N',
@@ -227,6 +228,7 @@ def load_embeddings(args, vocab):
 
 def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_loader=None):
     best_dev_acc = 0.0
+    train_acc = 0.0
     done = False
     epoch = 0
     epochs_without_improvement = 0
@@ -237,15 +239,21 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         os.makedirs(args.output_dir)
 
     while not done:
+        correct = 0
         for batch_idx, (data, target, indices) in enumerate(train_loader):
             data, target = data.to(args.device), target.to(args.device)
             output = model.fit(data, target)
+            pred = output['probs'].max(1, keepdim=True)[1]
+            correct += pred.eq(target.view_as(pred)).sum().item()
             loss = output['loss'].item()
             if batch_idx % args.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(train_loader.sampler),
                     100. * batch_idx / len(train_loader), loss))
 
+        print('Training set: Loss: {:.4f}, Accuracy: {}/{} ({:.3f}%)'.format(
+            loss, correct, len(train_loader.sampler),
+            100. * correct / len(train_loader.sampler)))
         if args.model == 'dwac':
             dev_output = test_fast(
                 args, model, dev_loader, ref_loader, name='Dev')
@@ -257,6 +265,7 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         if dev_acc > best_dev_acc:
             print("New best dev accuracy: {:.5f}\n".format(dev_acc))
             best_dev_acc = dev_acc
+            train_acc = correct / len(test_loader.sampler)
             epochs_without_improvement = 0
             best_epoch = epoch
             model_file = os.path.join(args.output_dir, 'model.best.tar')
@@ -337,7 +346,7 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
 
     print('Saving Dev+Test Metrics')
     with open(os.path.join(args.output_dir, 'metrics.json'), 'w') as metrics_f:
-        json.dump({'dev_acc': dev_acc, 'test_acc': test_acc, 'best_epoch': best_epoch},
+        json.dump({'train_acc': train_acc, 'dev_acc': dev_acc, 'test_acc': test_acc, 'best_epoch': best_epoch},
                   metrics_f,
                   indent=4)
 
