@@ -88,21 +88,7 @@ def main():
                         help='random seed')
 
     args = parser.parse_args()
-
-    if args.device is None:
-        args.device = 'cpu'
-    else:
-        args.device = 'cuda:' + str(args.device)
-    print("Using device:", args.device)
-    args.update_embeddings = not args.fix_embeddings
-
-    if args.seed is not None:
-        np.random.seed(args.seed)
-        torch.manual_seed(args.seed)
-        if args.device != 'cpu':
-            torch.backends.cudnn.deterministic = True
-            torch.cuda.manual_seed_all(args.seed)
-
+    print("Start predicting")
     # load data and create vocab and label vocab objects
     vocab, label_vocab, train_loader, dev_loader, test_loader, ref_loader, ood_loader = \
         load_data(args)
@@ -111,9 +97,68 @@ def main():
     # create the model
     model_file = os.path.join(args.output_dir, 'model.best.tar')
     print("Reloading best model")
-    model.load(model_file)
+    model = torch.load(model_file)
+
+
 
     train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_loader)
+
+def load_data(args):
+
+    ood_loader = None
+    train_dataset, test_dataset, ood_dataset = load_dataset(args.root_dir, args.dataset, args.subset, args.lower)
+
+    print(len(train_dataset))
+    print(len(test_dataset))
+    n_train = len(train_dataset)
+    indices = list(range(n_train))
+    split = int(np.floor(args.dev_prop * n_train))
+    np.random.shuffle(indices)
+    train_idx, dev_idx = indices[split:], indices[:split]
+    train_sampler = SubsetRandomSampler(train_idx)
+    dev_sampler = SubsetRandomSampler(dev_idx)
+    ref_sampler = SubsetRandomSampler(train_idx)
+
+    kwargs = {'num_workers': 1, 'pin_memory': True} if args.device != 'cpu' else {}
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        sampler=train_sampler,
+        shuffle=False,
+        collate_fn=collate_fn,
+        **kwargs)
+    dev_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.test_batch_size,
+        sampler=dev_sampler,
+        shuffle=False,
+        collate_fn=collate_fn,
+        **kwargs)
+    test_loader = torch.utils.data.DataLoader(
+        test_dataset,
+        batch_size=args.test_batch_size,
+        shuffle=True,
+        collate_fn=collate_fn,
+        **kwargs)
+    ref_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=args.test_batch_size,
+        sampler=ref_sampler,
+        shuffle=False,
+        collate_fn=collate_fn,
+        **kwargs)
+    if ood_dataset is not None:
+        ood_loader = torch.utils.data.DataLoader(
+            ood_dataset,
+            batch_size=args.test_batch_size,
+            shuffle=True,
+            collate_fn=collate_fn,
+            **kwargs)
+
+    vocab = train_dataset.vocab
+    label_vocab = train_dataset.label_vocab
+
+    return vocab, label_vocab, train_loader, dev_loader, test_loader, ref_loader, ood_loader
 
 
 def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_loader=None):
@@ -155,24 +200,26 @@ def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
     zs = []
     atts = []
     n_items = 0
-    with open(os.path.join(args.output_dir, 'metrics.json'), 'w') as metrics_f:
-    for batch_idx, (data, target, indices) in enumerate(test_loader):
-        data, target = data.to(args.device), target.to(args.device)
-        output = model.evaluate(data, target, ref_loader)
-        test_loss += output['total_loss'].item()
-        batch_size = len(target)
-        n_items += batch_size
-        pred = output['probs'].max(1, keepdim=True)[1]
-        correct += pred.eq(target.view_as(pred)).sum().item()
-        all_indices.extend(list(to_numpy(indices, args.device)))
-        if not return_acc:
-            true_labels.extend(list(to_numpy(target, args.device)))
-            pred_probs.append(to_numpy(output['probs'].exp(), args.device))
-            # all_indices.extend(list(to_numpy(indices, args.device)))
-            zs.append(to_numpy(output['z'], args.device))
-            atts.append(to_numpy(output['att'], args.device))
-            if args.model == 'dwac':
-                confs.append(to_numpy(output['confs'], args))
+    with open(os.path.join(args.output_dir, 'predicted.tsv'), 'w') as predicted, open(os.path.join(args.output_dir, 'actual.tsv'), 'w') as actual:
+        for batch_idx, (data, target, indices) in enumerate(test_loader):
+            data, target = data.to(args.device), target.to(args.device)
+            output = model.evaluate(data, target, ref_loader)
+            test_loss += output['total_loss'].item()
+            batch_size = len(target)
+            n_items += batch_size
+            pred = output['probs'].max(1, keepdim=True)[1]
+            correct += pred.eq(target.view_as(pred)).sum().item()
+            actual.write(label_vocab(target) + "\n")
+            predicted.write(label_vocab(pred) + "\n")
+            all_indices.extend(list(to_numpy(indices, args.device)))
+            if not return_acc:
+                true_labels.extend(list(to_numpy(target, args.device)))
+                pred_probs.append(to_numpy(output['probs'].exp(), args.device))
+                # all_indices.extend(list(to_numpy(indices, args.device)))
+                zs.append(to_numpy(output['z'], args.device))
+                atts.append(to_numpy(output['att'], args.device))
+                if args.model == 'dwac':
+                    confs.append(to_numpy(output['confs'], args))
 
     test_loss /= len(test_loader.sampler)
     print('{:s} set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)'.format(
@@ -197,3 +244,6 @@ def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
 
         return (acc, true_labels, all_indices,
                 np.vstack(pred_probs), np.vstack(zs), confs, att_matrix)
+
+if __name__ == "__main__":
+    main()
