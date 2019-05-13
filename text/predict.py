@@ -108,22 +108,10 @@ def main():
         load_data(args)
     args.n_classes = len(label_vocab)
 
-    # load an initialize the embeddings
-    embeddings_matrix = load_embeddings(args, vocab)
-
     # create the model
-    if args.model == 'baseline':
-        print("Creating baseline model")
-        model = TextBaseline(args, vocab, embeddings_matrix)
-    elif args.model == 'dwac':
-        print("Creating DWAC model")
-        model = AttentionCnnDwac(args, vocab, embeddings_matrix)
-    elif args.model == 'proto':
-        print("Creating Prototyped DWAC model")
-        model = ProtoDwac(args, vocab, embeddings_matrix)
-    else:
-        raise ValueError("Model type not recognized.")
-    print("Update embeddings = ", args.update_embeddings)
+    model_file = os.path.join(args.output_dir, 'model.best.tar')
+    print("Reloading best model")
+    model.load(model_file)
 
     train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_loader)
 
@@ -139,9 +127,6 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
     if not os.path.exists(args.output_dir):
         os.makedirs(args.output_dir)
 
-    model_file = os.path.join(args.output_dir, 'model.best.tar')
-    print("Reloading best model")
-    model.load(model_file)
 
     print("Doing test eval")
     if args.model == 'dwac':
@@ -152,13 +137,6 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         test_acc, test_labels, test_indices, test_pred_probs, test_z, test_confs, test_atts = test(
             args, model, test_loader, ref_loader, name='Test')
         print("Saving")
-        np.savez(os.path.join(args.output_dir, 'test.npz'),
-                 labels=test_labels,
-                 z=test_z,
-                 pred_probs=test_pred_probs,
-                 indices=test_indices,
-                 confs=test_confs,
-                 atts=test_atts)
 
 
     print('Saving Dev+Test Metrics')
@@ -166,3 +144,56 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         json.dump({'dev_acc': dev_acc, 'test_acc': test_acc, 'best_epoch': best_epoch},
                   metrics_f,
                   indent=4)
+
+def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
+    test_loss = 0
+    correct = 0
+    true_labels = []
+    all_indices = []
+    pred_probs = []
+    confs = []
+    zs = []
+    atts = []
+    n_items = 0
+    with open(os.path.join(args.output_dir, 'metrics.json'), 'w') as metrics_f:
+    for batch_idx, (data, target, indices) in enumerate(test_loader):
+        data, target = data.to(args.device), target.to(args.device)
+        output = model.evaluate(data, target, ref_loader)
+        test_loss += output['total_loss'].item()
+        batch_size = len(target)
+        n_items += batch_size
+        pred = output['probs'].max(1, keepdim=True)[1]
+        correct += pred.eq(target.view_as(pred)).sum().item()
+        all_indices.extend(list(to_numpy(indices, args.device)))
+        if not return_acc:
+            true_labels.extend(list(to_numpy(target, args.device)))
+            pred_probs.append(to_numpy(output['probs'].exp(), args.device))
+            # all_indices.extend(list(to_numpy(indices, args.device)))
+            zs.append(to_numpy(output['z'], args.device))
+            atts.append(to_numpy(output['att'], args.device))
+            if args.model == 'dwac':
+                confs.append(to_numpy(output['confs'], args))
+
+    test_loss /= len(test_loader.sampler)
+    print('{:s} set: Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)'.format(
+        name, test_loss, correct, len(test_loader.sampler),
+        100. * correct / len(test_loader.sampler)))
+    print()
+
+    acc = correct / len(test_loader.sampler)
+    if args.model == 'dwac' and not return_acc:
+        confs = np.vstack(confs)
+
+    if return_acc:
+        return acc, all_indices
+    else:
+        max_att_len = np.max([m.shape[1] for m in atts])
+        att_matrix = np.zeros([n_items, max_att_len])
+        index = 0
+        for m in atts:
+            batch_size, width = m.shape
+            att_matrix[index:index+batch_size, :width] = m.copy()
+            index += batch_size
+
+        return (acc, true_labels, all_indices,
+                np.vstack(pred_probs), np.vstack(zs), confs, att_matrix)
