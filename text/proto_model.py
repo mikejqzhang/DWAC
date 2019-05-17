@@ -119,7 +119,11 @@ class ProtoDwacModule(nn.Module):
         class_dists = self.classify_against_ref(z, z_norm, self.proto_xs, self.proto_ys)
         probs = torch.div(class_dists.t(), class_dists.sum(dim=1)).log().t()
 
-        output_dict = {'z': z, 'probs': probs, 'att': alpha}
+        output_dict = {'z': z,
+                       'probs': probs,
+                       'att': alpha,
+                       'confs': class_dists}
+
         if y is not None:
             total_loss = self.criterion(probs, y)
             loss = total_loss / x.shape[0]
