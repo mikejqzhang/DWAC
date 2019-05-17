@@ -39,6 +39,9 @@ class ProtoDwac(object):
     def load(self, filepath):
         self.model.load_state_dict(torch.load(filepath))
 
+    def get_prototypes(self):
+        return (self.model.proto_xs.cpu().detach().numpy(),
+                self.model.proto_ys.cpu().detach().numpy())
 
 class ProtoDwacModule(nn.Module):
     def __init__(self, args, vocab, embeddings_matrix):

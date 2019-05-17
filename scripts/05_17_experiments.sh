@@ -1,3 +1,11 @@
+python -m text.run --max-epochs 1 --batch-size 32 --device 0 --model proto --dataset imdb --n-proto 4 --output-dir ./data/05_17/imdb_proto_4
+
+
+
+
+
+
+
 # python -m text.run --batch-size 32 --z-dim 5 --device 0 --model dwac --dataset imdb --n-proto 1 --output-dir ./data/temp/imdb_dwac
 # python -m text.run --batch-size 32 --z-dim 5 --device 0 --model baseline --dataset imdb --n-proto 1 --output-dir ./data/temp/imdb_baseline
 
@@ -7,7 +15,6 @@
 # python -m text.run --batch-size 32 --z-dim 50 --device 1 --model baseline --dataset stackoverflow --n-proto 1 --output-dir ./data/temp/stackoverflow_baseline
 
 # python -m text.run --batch-size 32 --device 0 --model proto --dataset imdb --n-proto 1 --output-dir ./data/temp/imdb_proto_1
-# python -m text.run --batch-size 32 --device 0 --model proto --dataset imdb --n-proto 4 --output-dir ./data/temp/imdb_proto_4
 # python -m text.run --batch-size 32 --device 0 --model proto --dataset imdb --n-proto 16 --output-dir ./data/temp/imdb_proto_16
 # python -m text.run --batch-size 32 --device 0 --model proto --dataset imdb --n-proto 64 --output-dir ./data/temp/imdb_proto_64
 # python -m text.run --batch-size 32 --device 0 --model proto --dataset imdb --n-proto 256 --output-dir ./data/temp/imdb_proto_256

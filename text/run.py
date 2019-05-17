@@ -286,6 +286,13 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
     print("Reloading best model")
     model.load(model_file)
 
+    if args.model == 'proto':
+        print("Saving Prototypes")
+        prototypes, prototype_labels = model.get_prototypes()
+        np.savez(os.path.join(args.output_dir, 'prototypes.npz'),
+                 labels=prototype_labels,
+                 prototypes=prototypes)
+
     print("Embedding training data")
     train_indices, train_z, train_labels, atts = embed(args, model, ref_loader)
     print("Saving")
