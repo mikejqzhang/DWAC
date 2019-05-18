@@ -307,6 +307,16 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         dev_output = test_fast(args, model, dev_loader, ref_loader, name='Dev')
         dev_acc = dev_output['accuracy']
         save_output(os.path.join(args.output_dir, 'dev.npz'), dev_output)
+    elif args.model == 'proto':
+        dev_acc, dev_labels, dev_indices, dev_pred_probs, dev_z, dev_confs, dev_atts = test(
+            args, model, dev_loader, ref_loader, name='Dev')
+        np.savez(os.path.join(args.output_dir, 'dev.npz'),
+                 z=dev_z,
+                 labels=dev_labels,
+                 indices=dev_indices,
+                 pred_probs=dev_pred_probs,
+                 confs=dev_confs,
+                 atts=dev_atts)
     else:
         dev_acc, dev_labels, dev_indices, dev_pred_probs, dev_z, dev_confs, dev_atts = test(
             args, model, dev_loader, ref_loader, name='Dev')
@@ -323,6 +333,16 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         test_output = test_fast(args, model, test_loader, ref_loader, name='Test')
         test_acc = test_output['accuracy']
         save_output(os.path.join(args.output_dir, 'test.npz'), test_output)
+    elif args.model == 'proto':
+        test_acc, test_labels, test_indices, test_pred_probs, test_z, test_confs, test_atts = test(
+            args, model, test_loader, ref_loader, name='test')
+        np.savez(os.path.join(args.output_dir, 'test.npz'),
+                 z=test_z,
+                 labels=test_labels,
+                 indices=test_indices,
+                 pred_probs=test_pred_probs,
+                 confs=test_confs,
+                 atts=test_atts)
     else:
         test_acc, test_labels, test_indices, test_pred_probs, test_z, test_confs, test_atts = test(
             args, model, test_loader, ref_loader, name='Test')
@@ -384,7 +404,7 @@ def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
             # all_indices.extend(list(to_numpy(indices, args.device)))
             zs.append(to_numpy(output['z'], args.device))
             atts.append(to_numpy(output['att'], args.device))
-            if args.model == 'dwac':
+            if args.model in ['proto', 'dwac']:
                 confs.append(to_numpy(output['confs'], args))
 
     test_loss /= len(test_loader.sampler)
@@ -394,7 +414,7 @@ def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
     print()
 
     acc = correct / len(test_loader.sampler)
-    if args.model == 'dwac' and not return_acc:
+    if args.model in ['proto', 'dwac'] and not return_acc:
         confs = np.vstack(confs)
 
     if return_acc:

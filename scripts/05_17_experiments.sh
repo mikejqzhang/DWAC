@@ -1,9 +1,13 @@
-python -m text.run --max-epochs 1 --batch-size 32 --device 0 --model proto --dataset imdb --n-proto 4 --output-dir ./data/05_17/imdb_proto_4
+# python -m text.run --batch-size 32 --max-epochs 0 --device 0 --model proto --dataset imdb --n-proto 4 --output-dir ./data/tmp
 
+# python -m text.run --batch-size 32 --device 0 --model proto --dataset imdb --n-proto 4 --output-dir ./data/05_17/imdb_proto_4
+python -m text.run --batch-size 32 --device 0 --model proto --dataset imdb --n-proto 64 --output-dir ./data/05_17/imdb_proto_64
+# python -m text.run --batch-size 32 --device 0 --model proto --dataset imdb --n-proto 256 --output-dir ./data/05_17/imdb_proto_256
 
-
-
-
+# python -m text.run --batch-size 32 --z-dim 50 --device 0 --model proto --dataset stackoverflow --n-proto 4 --output-dir ./data/05_17/stackoverflow_proto_4_zdim_50
+# python -m text.run --batch-size 32 --z-dim 50 --device 0 --model proto --dataset stackoverflow --n-proto 64 --output-dir ./data/05_17/stackoverflow_proto_64_zdim_50
+# python -m text.run --batch-size 32 --z-dim 30 --device 0 --model proto --dataset stackoverflow --n-proto 4 --output-dir ./data/05_17/stackoverflow_proto_4_zdim_30
+# python -m text.run --batch-size 32 --z-dim 30 --device 0 --model proto --dataset stackoverflow --n-proto 64 --output-dir ./data/05_17/stackoverflow_proto_64_zdim_30
 
 
 # python -m text.run --batch-size 32 --z-dim 5 --device 0 --model dwac --dataset imdb --n-proto 1 --output-dir ./data/temp/imdb_dwac
