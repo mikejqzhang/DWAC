@@ -27,6 +27,8 @@ def main():
                         help='Dataset to run [imdb|amazon|stackoverflow|subjectivity]')
     parser.add_argument('--subset', type=str, default=None, metavar='N',
                         help='Subset for amazon or framing dataset [beauty|...]')
+    parser.add_argument('--ood-class', type=str, default=None, metavar='N',
+                        help='')
 
     # Text Options
     parser.add_argument('--lower', action='store_true', default=False,
@@ -133,7 +135,9 @@ def main():
 def load_data(args):
 
     ood_loader = None
-    train_dataset, test_dataset, ood_dataset = load_dataset(args.root_dir, args.dataset, args.subset, args.lower)
+    train_dataset, test_dataset, ood_dataset = load_dataset(args.root_dir, args.dataset,
+                                                            args.subset, args.lower,
+                                                            args.ood_class)
 
     print(len(train_dataset))
     print(len(test_dataset))

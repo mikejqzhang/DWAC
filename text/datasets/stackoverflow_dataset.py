@@ -129,7 +129,7 @@ class StackOverflowDataset(TextDataset):
 
     def preprocess(self):
         """Preprocess the raw data file"""
-        if self._check_processed_exists():
+        if self._check_processed_exists() and not self.ood_classes:
             return
 
         try:
