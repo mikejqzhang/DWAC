@@ -364,9 +364,20 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
             ood_output = test_fast(args, model, ood_loader, ref_loader, name='OOD')
             ood_acc = ood_output['accuracy']
             save_output(os.path.join(args.output_dir, 'ood.npz'), ood_output)
+        elif args.model == 'proto':
+            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = ood(
+                args, model, ood_loader, ref_loader, name='ood')
+            np.savez(os.path.join(args.output_dir, 'ood.npz'),
+                     z=ood_z,
+                     labels=ood_labels,
+                     indices=ood_indices,
+                     pred_probs=ood_pred_probs,
+                     confs=ood_confs,
+                     atts=ood_atts)
         else:
             print("Doing OOD eval")
-            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(args, model, ood_loader, ref_loader, name='OOD')
+            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(
+                args, model, ood_loader, ref_loader, name='OOD')
             print("Saving")
             np.savez(os.path.join(args.output_dir, 'ood.npz'),
                      labels=ood_labels,
@@ -377,9 +388,8 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
 
     print('Saving Dev+Test Metrics')
     with open(os.path.join(args.output_dir, 'metrics.json'), 'w') as metrics_f:
-        json.dump({'train_acc': train_acc, 'dev_acc': dev_acc, 'test_acc': test_acc, 'best_epoch': best_epoch},
-                  metrics_f,
-                  indent=4)
+        json.dump({'train_acc': train_acc, 'dev_acc': dev_acc,
+                   'test_acc': test_acc, 'best_epoch': best_epoch}, metrics_f, indent=4)
 
 
 def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
