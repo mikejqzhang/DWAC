@@ -33,8 +33,8 @@ def main():
                         help='Convert text to lower case')
 
     # Model Options
-    parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',
-    #parser.add_argument('--glove-file', type=str, default='/cse/web/courses/cse447/19wi/assignments/resources/glove/glove.6B.300d.txt.gz',
+    #parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',
+    parser.add_argument('--glove-file', type=str, default='/cse/web/courses/cse447/19wi/assignments/resources/glove/glove.6B.300d.txt.gz',
                         metavar='N', help='Glove vectors')
     parser.add_argument('--embedding-dim', type=int, default=300, metavar='N',
                         help='word vector dimensions')

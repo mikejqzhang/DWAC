@@ -12,8 +12,12 @@ from text.datasets.text_dataset import collate_fn
 from text.baseline_model import TextBaseline
 from text.dwac_model import AttentionCnnDwac
 from text.proto_model import ProtoDwac
+from text.seed_proto_model import SeedProtoDwac
 from text.common import load_dataset
 from utils.common import to_numpy
+from collections import defaultdict, Counter
+from sklearn.feature_extraction.text import CountVectorizer
+
 
 
 def main():
@@ -33,9 +37,9 @@ def main():
                         help='Convert text to lower case')
 
     # Model Options
-    parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',metavar='N', help='Glove vectors')
-    #parser.add_argument('--glove-file', type=str, default='/cse/web/courses/cse447/19wi/assignments/resources/glove/glove.6B.300d.txt.gz',
-    #                    metavar='N', help='Glove vectors')
+    #parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',metavar='N', help='Glove vectors')
+    parser.add_argument('--glove-file', type=str, default='/cse/web/courses/cse447/19wi/assignments/resources/glove/glove.6B.300d.txt.gz',
+                        metavar='N', help='Glove vectors')
     parser.add_argument('--embedding-dim', type=int, default=300, metavar='N',
                         help='word vector dimensions')
     parser.add_argument('--hidden-dim', type=int, default=100, metavar='N',
@@ -106,9 +110,38 @@ def main():
             torch.cuda.manual_seed_all(args.seed)
 
     # load data and create vocab and label vocab objects
-    vocab, label_vocab, train_loader, dev_loader, test_loader, ref_loader, ood_loader = \
+    vocab, label_vocab, train_loader, dev_loader, test_loader, ref_loader, ood_loader, seed_loader = \
         load_data(args)
     args.n_classes = len(label_vocab)
+
+    classes = defaultdict(list)
+    text = []
+    vectorizer = CountVectorizer()
+    for data, target, indices in seed_loader:
+        text = [for line in data]
+        print(np.array2string(data.numpy().view()))
+        X = vectorizer.fit_transform(str(data.numpy().view()))
+    # for data, target, indices in seed_loader:
+    #     g = Counter(data.numpy().view())
+    #     for idx, label in enumerate(target):
+    #         # c.append(Counter(data[idx].numpy()))
+    #         classes[label.item()].append(data[idx].numpy())
+    #
+    # for data, target, indices in seed_loader:
+    #     g = Counter(data.numpy().view())
+    #     for idx, label in enumerate(target):
+    #         # c.append(Counter(data[idx].numpy()))
+    #         classes[label.item()].append(data[idx].numpy())
+    # sumbags = sum(c, Counter())
+
+    print(X.toarray())
+
+    # for k in classes.keys():
+    #     print(classes[k])
+    #     print("next--------------------------------")
+
+    exit()
+
 
     # load an initialize the embeddings
     embeddings_matrix = load_embeddings(args, vocab)
@@ -123,6 +156,11 @@ def main():
     elif args.model == 'proto':
         print("Creating Prototyped DWAC model")
         model = ProtoDwac(args, vocab, embeddings_matrix)
+    elif args.model == 'seed_proto':
+        print("Creating Seeded Prototyped DWAC model")
+        model = SeedProtoDwac(args, vocab, embeddings_matrix)
+        model.model.proto_xs = model.model.get_representation()
+        model.model.proto_ys = None
     else:
         raise ValueError("Model type not recognized.")
     print("Update embeddings = ", args.update_embeddings)
@@ -174,6 +212,12 @@ def load_data(args):
         shuffle=False,
         collate_fn=collate_fn,
         **kwargs)
+    seed_loader = torch.utils.data.DataLoader(
+        train_dataset,
+        batch_size=len(train_dataset),
+        shuffle=False,
+        collate_fn=collate_fn,
+        **kwargs)
     if ood_dataset is not None:
         ood_loader = torch.utils.data.DataLoader(
             ood_dataset,
@@ -185,7 +229,7 @@ def load_data(args):
     vocab = train_dataset.vocab
     label_vocab = train_dataset.label_vocab
 
-    return vocab, label_vocab, train_loader, dev_loader, test_loader, ref_loader, ood_loader
+    return vocab, label_vocab, train_loader, dev_loader, test_loader, ref_loader, ood_loader, seed_loader
 
 
 def load_embeddings(args, vocab):
@@ -241,6 +285,7 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
     while not done:
         correct = 0
         for batch_idx, (data, target, indices) in enumerate(train_loader):
+            print(data.shape)
             data, target = data.to(args.device), target.to(args.device)
             output = model.fit(data, target)
             pred = output['probs'].max(1, keepdim=True)[1]
