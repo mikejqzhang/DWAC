@@ -54,10 +54,12 @@ class StackOverflowDataset(TextDataset):
 
     class_to_idx = {_class: i for i, _class in enumerate(classes)}
 
-    def __init__(self, root, partition='train', download=False, lower=True, ood_class=None):
+    def __init__(self, root, partition='train', download=False, lower=True,
+                 ood_class=None, preprocess=False):
         super().__init__()
         self.root = os.path.expanduser(root)
         self.partition = partition
+        self.preprocess = preprocess
         if ood_class is not None:
             self.ood_classes = [ood_class]
         else:
@@ -129,7 +131,7 @@ class StackOverflowDataset(TextDataset):
 
     def preprocess(self):
         """Preprocess the raw data file"""
-        if self._check_processed_exists() and len(self.ood_classes) == 0:
+        if self._check_processed_exists() and not self.preprocess:
             return
 
         try:
