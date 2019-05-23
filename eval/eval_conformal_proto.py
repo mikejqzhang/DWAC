@@ -149,7 +149,7 @@ def eval_conformal_dwac(test_file, dev_file, epsilon, xmax, ymax, normalize, plo
         ax.plot(x, conf_accs, label='conf')
         ax.set_ylim(0.9, 1.0)
         ax.legend()
-        plt.savefig('conformal_dwac.pdf')
+        plt.savefig('conformal_proto.pdf')
 
         fig, ax = plt.subplots(figsize=(6, 2))
         ax.hist(test_pred_probs.max(1), bins=np.linspace(0, 1, 101))
@@ -161,11 +161,11 @@ def eval_conformal_dwac(test_file, dev_file, epsilon, xmax, ymax, normalize, plo
         ax.set_ylim(0, ymax)
         ax.set_ylabel('Test instances')
         ax.set_xlabel('Credibility')
-        plt.savefig('hist_dwac_creds.pdf', bbox_inches='tight')
+        plt.savefig('hist_proto_creds.pdf', bbox_inches='tight')
 
         fig, ax = plt.subplots()
         ax.hist(confidence, bins=np.linspace(0, 1, 101))
-        plt.savefig('hist_dwac_confs.pdf')
+        plt.savefig('hist_proto_confs.pdf')
 
     acc_vals = []
     empty_vals = []
@@ -193,9 +193,9 @@ def eval_conformal_dwac(test_file, dev_file, epsilon, xmax, ymax, normalize, plo
         ax.set_ylabel('Proportion of test data')
         ax.legend()
         if normalize:
-            plt.savefig('test_dwac_normalize.pdf', bbox_inches='tight')
+            plt.savefig('test_proto_normalize.pdf', bbox_inches='tight')
         else:
-            plt.savefig('test_dwac.pdf', bbox_inches='tight')
+            plt.savefig('test_proto.pdf', bbox_inches='tight')
 
     return acc_vals, empty_vals, multi_vals, multi_means
 
