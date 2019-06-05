@@ -27,16 +27,17 @@ def main():
                         help='Dataset to run [imdb|amazon|stackoverflow|subjectivity|yelp]')
     parser.add_argument('--subset', type=str, default=None, metavar='N',
                         help='Subset for amazon or framing dataset [beauty|...]')
-    parser.add_argument('--ood', type=bool, default=False,
-                        help='Flag to include ood dataset')
+    parser.add_argument('--ood-class', type=str, default=None, metavar='N',
+                        help='')
 
     # Text Options
     parser.add_argument('--lower', action='store_true', default=False,
                         help='Convert text to lower case')
 
     # Model Options
-    parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',
-                        metavar='N', help='Glove vectors')
+    parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',metavar='N', help='Glove vectors')
+    #parser.add_argument('--glove-file', type=str, default='/cse/web/courses/cse447/19wi/assignments/resources/glove/glove.6B.300d.txt.gz',
+    #                    metavar='N', help='Glove vectors')
     parser.add_argument('--embedding-dim', type=int, default=300, metavar='N',
                         help='word vector dimensions')
     parser.add_argument('--hidden-dim', type=int, default=100, metavar='N',
@@ -134,7 +135,9 @@ def main():
 def load_data(args):
 
     ood_loader = None
-    train_dataset, test_dataset, ood_dataset = load_dataset(args.root_dir, args.dataset, args.subset, args.lower, args.ood)
+    train_dataset, test_dataset, ood_dataset = load_dataset(args.root_dir, args.dataset,
+                                                            args.subset, args.lower,
+                                                            args.ood_class)
 
     print(len(train_dataset))
     print(len(test_dataset))
@@ -229,6 +232,7 @@ def load_embeddings(args, vocab):
 
 def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_loader=None):
     best_dev_acc = 0.0
+    train_acc = 0.0
     done = False
     epoch = 0
     epochs_without_improvement = 0
@@ -239,15 +243,21 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         os.makedirs(args.output_dir)
 
     while not done:
+        correct = 0
         for batch_idx, (data, target, indices) in enumerate(train_loader):
             data, target = data.to(args.device), target.to(args.device)
             output = model.fit(data, target)
+            pred = output['probs'].max(1, keepdim=True)[1]
+            correct += pred.eq(target.view_as(pred)).sum().item()
             loss = output['loss'].item()
             if batch_idx % args.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(train_loader.sampler),
                     100. * batch_idx / len(train_loader), loss))
 
+        print('Training set: Loss: {:.4f}, Accuracy: {}/{} ({:.3f}%)'.format(
+            loss, correct, len(train_loader.sampler),
+            100. * correct / len(train_loader.sampler)))
         if args.model == 'dwac':
             dev_output = test_fast(
                 args, model, dev_loader, ref_loader, name='Dev')
@@ -259,6 +269,7 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         if dev_acc > best_dev_acc:
             print("New best dev accuracy: {:.5f}\n".format(dev_acc))
             best_dev_acc = dev_acc
+            train_acc = correct / len(test_loader.sampler)
             epochs_without_improvement = 0
             best_epoch = epoch
             model_file = os.path.join(args.output_dir, 'model.best.tar')
@@ -279,6 +290,13 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
     print("Reloading best model")
     model.load(model_file)
 
+    if args.model == 'proto':
+        print("Saving Prototypes")
+        prototypes, prototype_labels = model.get_prototypes()
+        np.savez(os.path.join(args.output_dir, 'prototypes.npz'),
+                 labels=prototype_labels,
+                 prototypes=prototypes)
+
     print("Embedding training data")
     train_indices, train_z, train_labels, atts = embed(args, model, ref_loader)
     print("Saving")
@@ -293,6 +311,16 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         dev_output = test_fast(args, model, dev_loader, ref_loader, name='Dev')
         dev_acc = dev_output['accuracy']
         save_output(os.path.join(args.output_dir, 'dev.npz'), dev_output)
+    elif args.model == 'proto':
+        dev_acc, dev_labels, dev_indices, dev_pred_probs, dev_z, dev_confs, dev_atts = test(
+            args, model, dev_loader, ref_loader, name='Dev')
+        np.savez(os.path.join(args.output_dir, 'dev.npz'),
+                 z=dev_z,
+                 labels=dev_labels,
+                 indices=dev_indices,
+                 pred_probs=dev_pred_probs,
+                 confs=dev_confs,
+                 atts=dev_atts)
     else:
         dev_acc, dev_labels, dev_indices, dev_pred_probs, dev_z, dev_confs, dev_atts = test(
             args, model, dev_loader, ref_loader, name='Dev')
@@ -309,6 +337,16 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         test_output = test_fast(args, model, test_loader, ref_loader, name='Test')
         test_acc = test_output['accuracy']
         save_output(os.path.join(args.output_dir, 'test.npz'), test_output)
+    elif args.model == 'proto':
+        test_acc, test_labels, test_indices, test_pred_probs, test_z, test_confs, test_atts = test(
+            args, model, test_loader, ref_loader, name='test')
+        np.savez(os.path.join(args.output_dir, 'test.npz'),
+                 z=test_z,
+                 labels=test_labels,
+                 indices=test_indices,
+                 pred_probs=test_pred_probs,
+                 confs=test_confs,
+                 atts=test_atts)
     else:
         test_acc, test_labels, test_indices, test_pred_probs, test_z, test_confs, test_atts = test(
             args, model, test_loader, ref_loader, name='Test')
@@ -326,9 +364,20 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
             ood_output = test_fast(args, model, ood_loader, ref_loader, name='OOD')
             ood_acc = ood_output['accuracy']
             save_output(os.path.join(args.output_dir, 'ood.npz'), ood_output)
+        elif args.model == 'proto':
+            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = ood(
+                args, model, ood_loader, ref_loader, name='ood')
+            np.savez(os.path.join(args.output_dir, 'ood.npz'),
+                     z=ood_z,
+                     labels=ood_labels,
+                     indices=ood_indices,
+                     pred_probs=ood_pred_probs,
+                     confs=ood_confs,
+                     atts=ood_atts)
         else:
             print("Doing OOD eval")
-            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(args, model, ood_loader, ref_loader, name='OOD')
+            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(
+                args, model, ood_loader, ref_loader, name='OOD')
             print("Saving")
             np.savez(os.path.join(args.output_dir, 'ood.npz'),
                      labels=ood_labels,
@@ -339,9 +388,8 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
 
     print('Saving Dev+Test Metrics')
     with open(os.path.join(args.output_dir, 'metrics.json'), 'w') as metrics_f:
-        json.dump({'dev_acc': dev_acc, 'test_acc': test_acc, 'best_epoch': best_epoch},
-                  metrics_f,
-                  indent=4)
+        json.dump({'train_acc': train_acc, 'dev_acc': dev_acc,
+                   'test_acc': test_acc, 'best_epoch': best_epoch}, metrics_f, indent=4)
 
 
 def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
@@ -370,7 +418,7 @@ def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
             # all_indices.extend(list(to_numpy(indices, args.device)))
             zs.append(to_numpy(output['z'], args.device))
             atts.append(to_numpy(output['att'], args.device))
-            if args.model == 'dwac':
+            if args.model in ['proto', 'dwac']:
                 confs.append(to_numpy(output['confs'], args))
 
     test_loss /= len(test_loader.sampler)
@@ -380,7 +428,7 @@ def test(args, model, test_loader, ref_loader, name='Test', return_acc=False):
     print()
 
     acc = correct / len(test_loader.sampler)
-    if args.model == 'dwac' and not return_acc:
+    if args.model in ['proto', 'dwac'] and not return_acc:
         confs = np.vstack(confs)
 
     if return_acc:

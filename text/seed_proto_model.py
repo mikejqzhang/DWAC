@@ -3,13 +3,13 @@ import torch.nn as nn
 import torch.optim as optim
 
 
-class ProtoDwac(object):
+class SeedProtoDwac(object):
     def __init__(self, args, vocab, embeddings_matrix):
         self.device = args.device
         self.n_classes = args.n_classes
         self.eps = args.eps
 
-        self.model = ProtoDwacModule(args, vocab, embeddings_matrix).to(self.device)
+        self.model = SeedProtoDwacModule(args, vocab, embeddings_matrix).to(self.device)
         self.optim = optim.Adam((x for x in self.model.parameters() if x.requires_grad), args.lr)
 
     def fit(self, x, y):
@@ -43,9 +43,9 @@ class ProtoDwac(object):
         return (self.model.proto_xs.cpu().detach().numpy(),
                 self.model.proto_ys.cpu().detach().numpy())
 
-class ProtoDwacModule(nn.Module):
+class SeedProtoDwacModule(nn.Module):
     def __init__(self, args, vocab, embeddings_matrix):
-        super(ProtoDwacModule, self).__init__()
+        super(SeedProtoDwacModule, self).__init__()
         self.device = args.device
 
         self.eps = args.eps
@@ -82,9 +82,8 @@ class ProtoDwacModule(nn.Module):
         self.n_classes = args.n_classes
 
         self.n_proto = args.n_proto
-        self.proto_xs = nn.Parameter(torch.randn(self.n_classes * self.n_proto, self.z_dim))
-        self.proto_ys = nn.Parameter(torch.LongTensor(list(range(self.n_classes)) * self.n_proto),
-                                     requires_grad=False)
+        self.proto_xs = None
+        self.proto_ys = None
 
         self.conv1_layer = nn.Conv1d(self.embedding_dim,
                                      self.hidden_dim,
@@ -114,6 +113,8 @@ class ProtoDwacModule(nn.Module):
 
     def forward(self, x, y=None):
         z, alpha = self.get_representation(x)
+        if self.proto_xs is None or self.proto_ys is None:
+            print("error")
         z_norm = z.pow(2).sum(dim=1)
 
         class_dists = self.classify_against_ref(z, z_norm, self.proto_xs, self.proto_ys)
