@@ -22,11 +22,13 @@ def main():
 
     # Fundamental options
     parser.add_argument('--model', type=str, default='baseline', metavar='N',
-                        help='Model to use [baseline|dwac]')
+                        help='Model to use [baseline|dwac|proto]')
     parser.add_argument('--dataset', type=str, default='imdb', metavar='N',
-                        help='Dataset to run [imdb|amazon|stackoverflow|subjectivity]')
+                        help='Dataset to run [imdb|amazon|stackoverflow|subjectivity|yelp]')
     parser.add_argument('--subset', type=str, default=None, metavar='N',
                         help='Subset for amazon or framing dataset [beauty|...]')
+    parser.add_argument('--ood', type=bool, default=False,
+                        help='Flag to include ood dataset')
 
     # Text Options
     parser.add_argument('--lower', action='store_true', default=False,
@@ -132,7 +134,7 @@ def main():
 def load_data(args):
 
     ood_loader = None
-    train_dataset, test_dataset, ood_dataset = load_dataset(args.root_dir, args.dataset, args.subset, args.lower)
+    train_dataset, test_dataset, ood_dataset = load_dataset(args.root_dir, args.dataset, args.subset, args.lower, args.ood)
 
     print(len(train_dataset))
     print(len(test_dataset))

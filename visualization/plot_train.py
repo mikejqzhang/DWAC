@@ -7,6 +7,7 @@ from optparse import OptionParser
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
 
 stack_overflow_classes = ['wordpress',
                'oracle',
@@ -30,7 +31,7 @@ stack_overflow_classes = ['wordpress',
                'magento']
 
 imdb_classes = ['Negative', 'Postive']
-
+plot_function = TSNE
 
 def main():
     plt.rcParams["figure.figsize"] = (10,10)
@@ -70,8 +71,8 @@ def viz_data(data, name, dataset, num_proto, class_list, split=False):
 
     # scatter the labels
     labels = scatter(labels, n_classes)
-    pca = PCA(n_components=2)
-    reduced_z = pca.fit_transform(z)
+    plotter = plot_function(n_components=2)
+    reduced_z = plotter.fit_transform(z)
 
     if split:
         fig, axes = plt.subplots(nrows=1, ncols=n_classes, figsize=(n_classes*2, 2), sharex=True, sharey=True)
@@ -86,8 +87,8 @@ def viz_data(data, name, dataset, num_proto, class_list, split=False):
             scatters.append(ax.scatter(z[indices, 0], z[indices, 1], s=1, alpha=0.9))
 
     ax.legend(scatters, class_list)
-    plt.title('PCA of {} with {} prototypes'.format(dataset, num_proto))
-    plt.savefig('{}_{}_{}.pdf'.format(dataset, num_proto, name))
+    plt.title('t-SNE of {} with {} prototypes'.format(dataset, num_proto))
+    plt.savefig('tSNE_{}_{}_{}.pdf'.format(dataset, num_proto, name))
 
 
 def scatter(labels, n_classes):

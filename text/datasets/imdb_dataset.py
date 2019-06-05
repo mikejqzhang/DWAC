@@ -7,6 +7,7 @@ from torchvision.datasets.utils import download_url
 
 from utils import file_handling as fh
 from text.datasets.text_dataset import TextDataset, Vocab, tokenize
+from text.datasets.yelp_dataset import YelpDataset
 
 
 class IMDB(TextDataset):
@@ -29,14 +30,15 @@ class IMDB(TextDataset):
     processed_folder = 'processed'
     train_file = 'train.jsonlist'
     test_file = 'test.jsonlist'
+    ood_file = 'ood.jsonlist'
     vocab_file = 'vocab.json'
     classes = ['neg', 'pos']
     class_to_idx = {_class: i for i, _class in enumerate(classes)}
 
-    def __init__(self, root, train=True, download=False, strip_html=True, lower=True):
+    def __init__(self, root, partition='train', download=False, strip_html=True, lower=True, ood_class=None):
         super().__init__()
         self.root = os.path.expanduser(root)
-        self.train = train
+        self.partition = partition
         self.strip_html = strip_html
 
         if download:
@@ -45,12 +47,22 @@ class IMDB(TextDataset):
         if not self._check_raw_exists():
             raise RuntimeError('Dataset not found. You can use download=True to download it')
 
+
+        ood_dict = {'yelp': YelpDataset}
+
         self.preprocess()
 
-        if train:
+        if partition == 'train':
             self.all_docs = fh.read_jsonlist(os.path.join(self.root, self.processed_folder, self.train_file))
-        else:
+        elif partition == 'test':
             self.all_docs = fh.read_jsonlist(os.path.join(self.root, self.processed_folder, self.test_file))
+        elif partition == 'ood':
+            if ood_class:
+                self.ood_class = ood_dict[ood_class]
+                all_ood_docs = self.ood_class(self.root, train=False)
+                self.all_docs = all_ood_docs
+            else:
+                raise RuntimeError('Partition is "ood", but no ood_class is given')
 
         # Do lower-casing on demand, to avoid redoing slow tokenization
         if lower:
