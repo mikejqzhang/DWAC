@@ -8,12 +8,14 @@ from text.datasets.yelp_dataset import YelpDataset
 
 def load_dataset(root_dir, dataset, subset=None, lower=False, ood_class=None):
 
+    ood_dict = {'yelp':YelpDataset, 'stack_overflow':StackOverflowDataset}
+
     ood_dataset = None
     if dataset == 'imdb':
         train_dataset = IMDB(os.path.join(root_dir, 'imdb'), partition='train', download=True, strip_html=True, lower=lower)
         test_dataset = IMDB(os.path.join(root_dir, 'imdb'), partition='test', download=True, strip_html=True, lower=lower)
-        if ood_class:
-            ood_dataset = IMDB(os.path.join(root_dir, 'imdb'), partition='ood', download=False, strip_html=True, lower=lower, ood_class='yelp')
+        ood_dataset = ood_dict[ood_class](os.path.join(root_dir, ood_class), partition='test', download=True, strip_html=True,
+                               lower=lower)
     elif dataset == 'amazon':
         if subset is None:
             raise ValueError("Please provide a subset for the Amazon dataset.")

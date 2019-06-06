@@ -1,9 +1,13 @@
+import sys
 import os
 import json
 import gzip
 import argparse
-
+import pdb
 import numpy as np
+
+# Hack to make it work for me
+sys.path.insert(0, os.path.abspath(".."))
 
 import torch
 from torch.utils.data.sampler import SubsetRandomSampler
@@ -29,6 +33,7 @@ def main():
                         help='Subset for amazon or framing dataset [beauty|...]')
     parser.add_argument('--ood-class', type=str, default=None, metavar='N',
                         help='')
+    parser.add_argument('--test_only', type=bool, default=False)
 
     # Text Options
     parser.add_argument('--lower', action='store_true', default=False,
@@ -128,6 +133,38 @@ def main():
     else:
         raise ValueError("Model type not recognized.")
     print("Update embeddings = ", args.update_embeddings)
+
+    if args.test_only:
+        model_file = os.path.join(args.output_dir, 'model.best.tar')
+        print("Reloading best model")
+        model.load(model_file)
+        pdb.set_trace()
+        if ood_loader is not None:
+            if args.model == 'dwac':
+                ood_output = test_fast(args, model, ood_loader, ref_loader, name='OOD')
+                ood_acc = ood_output['accuracy']
+                save_output(os.path.join(args.output_dir, 'ood.npz'), ood_output)
+            elif args.model == 'proto':
+                ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(
+                    args, model, ood_loader, ref_loader, name='ood')
+                np.savez(os.path.join(args.output_dir, 'ood.npz'),
+                         z=ood_z,
+                         labels=ood_labels,
+                         indices=ood_indices,
+                         pred_probs=ood_pred_probs,
+                         confs=ood_confs,
+                         atts=ood_atts)
+            else:
+                print("Doing OOD eval")
+                ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(
+                    args, model, ood_loader, ref_loader, name='OOD')
+                print("Saving")
+                np.savez(os.path.join(args.output_dir, 'ood.npz'),
+                         labels=ood_labels,
+                         z=ood_z,
+                         pred_probs=ood_pred_probs,
+                         indices=ood_indices,
+                         confs=ood_confs)
 
     train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_loader)
 
@@ -365,7 +402,7 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
             ood_acc = ood_output['accuracy']
             save_output(os.path.join(args.output_dir, 'ood.npz'), ood_output)
         elif args.model == 'proto':
-            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = ood(
+            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(
                 args, model, ood_loader, ref_loader, name='ood')
             np.savez(os.path.join(args.output_dir, 'ood.npz'),
                      z=ood_z,
@@ -508,6 +545,7 @@ def save_output(path, output):
              pred_probs=output['probs'].exp().cpu().data.numpy(),
              confs=output['confs'].cpu().data.numpy(),
              atts=att_vectors)
+
 
 
 if __name__ == '__main__':

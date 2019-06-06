@@ -8,6 +8,7 @@ from torchvision.datasets.utils import download_url
 from utils import file_handling as fh
 from text.datasets.text_dataset import TextDataset, Vocab, tokenize
 from text.datasets.yelp_dataset import YelpDataset
+from text.datasets.stackoverflow_dataset import StackOverflowDataset
 
 
 class IMDB(TextDataset):
@@ -48,7 +49,7 @@ class IMDB(TextDataset):
             raise RuntimeError('Dataset not found. You can use download=True to download it')
 
 
-        ood_dict = {'yelp': YelpDataset}
+        ood_dict = {'yelp': YelpDataset, 'stack_overflow': StackOverflowDataset}
 
         self.preprocess()
 
@@ -59,7 +60,7 @@ class IMDB(TextDataset):
         elif partition == 'ood':
             if ood_class:
                 self.ood_class = ood_dict[ood_class]
-                all_ood_docs = self.ood_class(self.root, train=False)
+                all_ood_docs = self.ood_class(self.root, train=False).all_docs
                 self.all_docs = all_ood_docs
             else:
                 raise RuntimeError('Partition is "ood", but no ood_class is given')
