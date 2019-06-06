@@ -27,7 +27,7 @@ def main():
                         help='Dataset to run [imdb|amazon|stackoverflow|subjectivity|yelp]')
     parser.add_argument('--subset', type=str, default=None, metavar='N',
                         help='Subset for amazon or framing dataset [beauty|...]')
-    parser.add_argument('--ood-class', nargs='+', type=list, default=None, metavar='N',
+    parser.add_argument('--ood-class', nargs='+', type=list, default=[], metavar='N',
                         help='')
 
     # Text Options

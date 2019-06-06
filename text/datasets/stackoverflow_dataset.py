@@ -54,7 +54,7 @@ class StackOverflowDataset(TextDataset):
 
 
     def __init__(self, root, partition='train', download=False, lower=True,
-                 process=False, ood_class=None):
+                 process=False, ood_class=[]):
         super().__init__()
         self.root = os.path.expanduser(root)
         self.partition = partition
@@ -86,6 +86,9 @@ class StackOverflowDataset(TextDataset):
             self.all_docs = fh.read_jsonlist(os.path.join(self.root, self.processed_folder, self.test_file))
         else:
             raise RuntimeError("Partition {:s} not recognized".format(partition))
+
+        for doc in self.all_docs:
+            doc['label'] = self.classes[0]
 
         # Do lower-casing on demand, to avoid redoing slow tokenization
         if lower:
