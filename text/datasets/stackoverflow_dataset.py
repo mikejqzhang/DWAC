@@ -54,7 +54,7 @@ class StackOverflowDataset(TextDataset):
 
 
     def __init__(self, root, partition='train', download=False, lower=True,
-                 process=False, ood_class=None):
+                 process=False, ood_class=[]):
         super().__init__()
         self.root = os.path.expanduser(root)
         self.partition = partition
@@ -63,7 +63,7 @@ class StackOverflowDataset(TextDataset):
             self.ood_classes = list(ood_class)
         else:
             self.ood_classes = []
-        self.classes = [c for c in self.classes if c not in ood_class]
+        self.classes = [c for c in self.all_classes if c not in ood_class]
         self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
         self.text_field_name = 'tokens'
         self.label_field_name = 'label'
@@ -86,6 +86,9 @@ class StackOverflowDataset(TextDataset):
             self.all_docs = fh.read_jsonlist(os.path.join(self.root, self.processed_folder, self.test_file))
         else:
             raise RuntimeError("Partition {:s} not recognized".format(partition))
+
+        for doc in self.all_docs:
+            doc['label'] = self.classes[0]
 
         # Do lower-casing on demand, to avoid redoing slow tokenization
         if lower:
@@ -173,7 +176,8 @@ class StackOverflowDataset(TextDataset):
                 print("Processing line {:d} / 20000".format(line_i))
 
             text = tokenize(tokenizer, line)
-            label = self.classes[int(labels[line_i]) - 1]
+
+            label = self.all_classes[int(labels[line_i]) - 1]
 
             # save the text, label, and original file name
             doc_out = {'id': line_i, 'tokens': text.split(), 'label': label}
