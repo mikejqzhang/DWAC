@@ -63,7 +63,7 @@ class StackOverflowDataset(TextDataset):
             self.ood_classes = list(ood_class)
         else:
             self.ood_classes = []
-        self.classes = [c for c in self.classes if c not in ood_class]
+        self.classes = [c for c in self.all_classes if c not in ood_class]
         self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
         self.text_field_name = 'tokens'
         self.label_field_name = 'label'
@@ -173,7 +173,8 @@ class StackOverflowDataset(TextDataset):
                 print("Processing line {:d} / 20000".format(line_i))
 
             text = tokenize(tokenizer, line)
-            label = self.classes[int(labels[line_i]) - 1]
+
+            label = self.all_classes[int(labels[line_i]) - 1]
 
             # save the text, label, and original file name
             doc_out = {'id': line_i, 'tokens': text.split(), 'label': label}
