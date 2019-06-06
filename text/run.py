@@ -4,7 +4,7 @@ import gzip
 import argparse
 
 import numpy as np
-
+import random
 import torch
 from torch.utils.data.sampler import SubsetRandomSampler
 
@@ -16,7 +16,7 @@ from text.seed_proto_model import SeedProtoDwac
 from text.common import load_dataset
 from utils.common import to_numpy
 from collections import defaultdict, Counter
-from sklearn.feature_extraction.text import CountVectorizer
+# from sklearn.feature_extraction.text import CountVectorizer
 
 
 
@@ -116,31 +116,40 @@ def main():
 
     classes = defaultdict(list)
     text = []
-    vectorizer = CountVectorizer()
-    for data, target, indices in seed_loader:
-        text = [for line in data]
-        print(np.array2string(data.numpy().view()))
-        X = vectorizer.fit_transform(str(data.numpy().view()))
+    # vectorizer = CountVectorizer()
+    # for data, target, indices in seed_loader:
+    #    text = [for line in data]
+    #    print(np.array2string(data.numpy().view()))
+    #    X = vectorizer.fit_transform(str(data.numpy().view()))
     # for data, target, indices in seed_loader:
     #     g = Counter(data.numpy().view())
     #     for idx, label in enumerate(target):
     #         # c.append(Counter(data[idx].numpy()))
     #         classes[label.item()].append(data[idx].numpy())
     #
-    # for data, target, indices in seed_loader:
+    args.proto_ys = np.zeros(args.n_classes * args.n_proto)
+    for data, target, indices in seed_loader:
     #     g = Counter(data.numpy().view())
-    #     for idx, label in enumerate(target):
+        args.proto_xs = np.zeros((args.n_classes * args.n_proto, data.shape[1]))
+        print(args.proto_xs.shape)
+        for idx, label in enumerate(target):
     #         # c.append(Counter(data[idx].numpy()))
-    #         classes[label.item()].append(data[idx].numpy())
+            classes[label.item()].append(data[idx].numpy())
     # sumbags = sum(c, Counter())
 
-    print(X.toarray())
+    # print(X.toarray())
+ 
+    i = 0
+    for k in classes.keys():
+        if (args.n_proto > len(classes[k])):
+            print("# of protos greater than # of elements in classes")
+            exit()
+        samples = random.sample(classes[k], args.n_proto)
+        for sample in samples:
+            args.proto_xs[i] = sample
+            args.proto_ys[i] = k
+            i += 1
 
-    # for k in classes.keys():
-    #     print(classes[k])
-    #     print("next--------------------------------")
-
-    exit()
 
 
     # load an initialize the embeddings
@@ -159,8 +168,6 @@ def main():
     elif args.model == 'seed_proto':
         print("Creating Seeded Prototyped DWAC model")
         model = SeedProtoDwac(args, vocab, embeddings_matrix)
-        model.model.proto_xs = model.model.get_representation()
-        model.model.proto_ys = None
     else:
         raise ValueError("Model type not recognized.")
     print("Update embeddings = ", args.update_embeddings)
@@ -285,7 +292,6 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
     while not done:
         correct = 0
         for batch_idx, (data, target, indices) in enumerate(train_loader):
-            print(data.shape)
             data, target = data.to(args.device), target.to(args.device)
             output = model.fit(data, target)
             pred = output['probs'].max(1, keepdim=True)[1]
@@ -310,7 +316,7 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
         if dev_acc > best_dev_acc:
             print("New best dev accuracy: {:.5f}\n".format(dev_acc))
             best_dev_acc = dev_acc
-            train_acc = correct / len(test_loader.sampler)
+            train_acc = correct / len(train_loader.sampler)
             epochs_without_improvement = 0
             best_epoch = epoch
             model_file = os.path.join(args.output_dir, 'model.best.tar')

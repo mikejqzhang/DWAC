@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-
+import numpy as np
 
 class SeedProtoDwac(object):
     def __init__(self, args, vocab, embeddings_matrix):
@@ -82,12 +82,14 @@ class SeedProtoDwacModule(nn.Module):
         self.n_classes = args.n_classes
 
         self.n_proto = args.n_proto
-        self.proto_xs = None
-        self.proto_ys = None
+        self.proto_xs = nn.Parameter(torch.LongTensor(args.proto_xs), requires_grad=False)
+        self.proto_ys = nn.Parameter(torch.LongTensor(args.proto_ys),
+                                     requires_grad=False)
 
         self.conv1_layer = nn.Conv1d(self.embedding_dim,
                                      self.hidden_dim,
                                      kernel_size=self.kernel_size,
+
                                      padding=self.kernel_size // 2)
 
         self.attn_layer = nn.Linear(self.hidden_dim, 1)
@@ -113,11 +115,12 @@ class SeedProtoDwacModule(nn.Module):
 
     def forward(self, x, y=None):
         z, alpha = self.get_representation(x)
-        if self.proto_xs is None or self.proto_ys is None:
-            print("error")
+        # print(self.proto_xs.shape)
+        # xs = np.asarray(self.proto_xs, dtype=float)
+        xs, _ = self.get_representation(self.proto_xs)
         z_norm = z.pow(2).sum(dim=1)
 
-        class_dists = self.classify_against_ref(z, z_norm, self.proto_xs, self.proto_ys)
+        class_dists = self.classify_against_ref(z, z_norm, xs, self.proto_ys)
         probs = torch.div(class_dists.t(), class_dists.sum(dim=1)).log().t()
 
         output_dict = {'z': z,
