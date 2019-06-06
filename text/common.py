@@ -20,8 +20,18 @@ def load_dataset(root_dir, dataset, subset=None, lower=False, ood_class=None):
         train_dataset = AmazonReviews(os.path.join(root_dir, 'amazon'), subset=subset, train=True, download=True, lower=lower)
         test_dataset = AmazonReviews(os.path.join(root_dir, 'amazon'), subset=subset, train=False, download=True, lower=lower)
     elif dataset == 'stackoverflow':
-        train_dataset = StackOverflowDataset(os.path.join(root_dir, 'stackoverflow'), partition='train', download=True, lower=lower, ood_class=ood_class)
-        test_dataset = StackOverflowDataset(os.path.join(root_dir, 'stackoverflow'), partition='test', download=True, lower=lower, ood_class=ood_class)
+        train_dataset = StackOverflowDataset(os.path.join(root_dir, 'stackoverflow'),
+                                             partition='train', download=True, lower=lower,
+                                             process=True,
+                                             ood_class=ood_class)
+        test_dataset = StackOverflowDataset(os.path.join(root_dir, 'stackoverflow'),
+                                            partition='test', download=True, lower=lower,
+                                            process=False,
+                                            ood_class=ood_class)
+        ood_dataset = StackOverflowDataset(os.path.join(root_dir, 'stackoverflow'),
+                                           partition='ood', download=True, lower=lower,
+                                           process=False,
+                                           ood_class=ood_class)
     elif dataset == 'subjectivity':
         train_dataset = SubjectivityDataset(os.path.join(root_dir, 'subjectivity'), train=True, download=True, lower=lower)
         test_dataset = SubjectivityDataset(os.path.join(root_dir, 'subjectivity'), train=False, download=True, lower=lower)

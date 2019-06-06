@@ -31,37 +31,40 @@ class StackOverflowDataset(TextDataset):
     test_file = 'test.jsonlist'
     ood_file = 'ood.jsonlist'
     vocab_file = 'vocab.json'
-    classes = ['wordpress',
-               'oracle',
-               'svn',
-               'apache',
-               'excel',
-               'matlab',
-               'visual-studio',
-               'cocoa',
-               'osx',
-               'bash',
-               'spring',
-               'hibernate',
-               'scala',
-               'sharepoint',
-               'ajax',
-               'qt',
-               'drupal',
-               'linq',
-               'haskell',
-               'magento']
+    all_classes = ['wordpress',
+                   'oracle',
+                   'svn',
+                   'apache',
+                   'excel',
+                   'matlab',
+                   'visual-studio',
+                   'cocoa',
+                   'osx',
+                   'bash',
+                   'spring',
+                   'hibernate',
+                   'scala',
+                   'sharepoint',
+                   'ajax',
+                   'qt',
+                   'drupal',
+                   'linq',
+                   'haskell',
+                   'magento']
 
-    class_to_idx = {_class: i for i, _class in enumerate(classes)}
 
-    def __init__(self, root, partition='train', download=False, lower=True, ood_class=None):
+    def __init__(self, root, partition='train', download=False, lower=True,
+                 process=False, ood_class=None):
         super().__init__()
         self.root = os.path.expanduser(root)
         self.partition = partition
+        self.process = process
         if ood_class is not None:
-            self.ood_classes = [ood_class]
+            self.ood_classes = list(ood_class)
         else:
             self.ood_classes = []
+        self.classes = [c for c in self.classes if c not in ood_class]
+        self.class_to_idx = {_class: i for i, _class in enumerate(self.classes)}
         self.text_field_name = 'tokens'
         self.label_field_name = 'label'
 
@@ -77,6 +80,8 @@ class StackOverflowDataset(TextDataset):
             self.all_docs = fh.read_jsonlist(os.path.join(self.root, self.processed_folder, self.train_file))
         elif partition == 'ood':
             self.all_docs = fh.read_jsonlist(os.path.join(self.root, self.processed_folder, self.ood_file))
+            for d in self.all_docs:
+                d['label'] = self.classes[0]
         elif partition == 'test':
             self.all_docs = fh.read_jsonlist(os.path.join(self.root, self.processed_folder, self.test_file))
         else:
@@ -129,7 +134,7 @@ class StackOverflowDataset(TextDataset):
 
     def preprocess(self):
         """Preprocess the raw data file"""
-        if self._check_processed_exists() and len(self.ood_classes) == 0:
+        if self._check_processed_exists() and not self.process:
             return
 
         try:
