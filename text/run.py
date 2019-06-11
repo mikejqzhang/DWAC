@@ -365,7 +365,7 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
             ood_acc = ood_output['accuracy']
             save_output(os.path.join(args.output_dir, 'ood.npz'), ood_output)
         elif args.model == 'proto':
-            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = ood(
+            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(
                 args, model, ood_loader, ref_loader, name='ood')
             np.savez(os.path.join(args.output_dir, 'ood.npz'),
                      z=ood_z,
