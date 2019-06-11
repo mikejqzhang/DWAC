@@ -37,9 +37,9 @@ def main():
                         help='Convert text to lower case')
 
     # Model Options
-    #parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',metavar='N', help='Glove vectors')
-    parser.add_argument('--glove-file', type=str, default='/cse/web/courses/cse447/19wi/assignments/resources/glove/glove.6B.300d.txt.gz',
-                        metavar='N', help='Glove vectors')
+    parser.add_argument('--glove-file', type=str, default='data/vectors/glove.6B.300d.txt.gz',metavar='N', help='Glove vectors')
+    # parser.add_argument('--glove-file', type=str, default='/cse/web/courses/cse447/19wi/assignments/resources/glove/glove.6B.300d.txt.gz',
+    #                     metavar='N', help='Glove vectors')
     parser.add_argument('--embedding-dim', type=int, default=300, metavar='N',
                         help='word vector dimensions')
     parser.add_argument('--hidden-dim', type=int, default=100, metavar='N',
@@ -411,6 +411,16 @@ def train(args, model, train_loader, dev_loader, test_loader, ref_loader, ood_lo
             ood_output = test_fast(args, model, ood_loader, ref_loader, name='OOD')
             ood_acc = ood_output['accuracy']
             save_output(os.path.join(args.output_dir, 'ood.npz'), ood_output)
+        elif args.model == 'proto':
+            ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(
+                args, model, ood_loader, ref_loader, name='ood')
+            np.savez(os.path.join(args.output_dir, 'ood.npz'),
+                     z=ood_z,
+                     labels=ood_labels,
+                     indices=ood_indices,
+                     pred_probs=ood_pred_probs,
+                     confs=ood_confs,
+                     atts=ood_atts)
         else:
             print("Doing OOD eval")
             ood_acc, ood_labels, ood_indices, ood_pred_probs, ood_z, ood_confs, ood_atts = test(args, model, ood_loader, ref_loader, name='OOD')
